@@ -1,0 +1,8 @@
+[workspace]
+members = [
+	"stdthread-web",
+	"mio-web",
+	"async_std-web",
+	"tokio_codec-web",
+	"hyper-web",
+]
