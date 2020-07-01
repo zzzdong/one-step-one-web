@@ -191,7 +191,8 @@ impl Request {
     }
 
     fn read_body(&mut self, _reader: &mut BufReader<TcpStream>) -> Result<()> {
-        unimplemented!()
+        // TODO: need implement
+        Ok(())
     }
 
     fn write_to(&self, writer: &mut BufWriter<TcpStream>) -> Result<()> {

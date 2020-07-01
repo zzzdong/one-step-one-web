@@ -119,13 +119,17 @@ impl Request {
 
         let headers = Self::read_header(reader).await?;
 
-        Ok(Request {
+        let mut req = Request {
             method,
             target,
             version,
             headers,
-            ..Default::default()
-        })
+            body: None,
+        };
+
+        req.read_body(reader).await?;
+
+        Ok(req)
     }
 
     async fn read_request_line(
@@ -151,6 +155,11 @@ impl Request {
 
     async fn read_header(reader: &mut BufReader<TcpStream>) -> Result<Headers> {
         Headers::read_from(reader).await
+    }
+
+    async fn read_body(&mut self, _reader: &mut BufReader<TcpStream>) -> Result<()> {
+        // TODO: need implement
+        Ok(())
     }
 
     async fn write_to(&self, writer: &mut BufWriter<TcpStream>) -> Result<()> {
