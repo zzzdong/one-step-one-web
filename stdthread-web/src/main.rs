@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Result};
@@ -142,7 +144,7 @@ impl Request {
             method: method.to_string(),
             target: path.to_string(),
             version: HTTP_VERSION_1_1.to_string(),
-            headers: headers,
+            headers,
             body: None,
         }
     }
@@ -152,13 +154,17 @@ impl Request {
 
         let headers = Self::read_header(reader)?;
 
-        Ok(Request {
+        let mut req = Request {
             method,
             target,
             version,
             headers,
-            ..Default::default()
-        })
+            body: None,
+        };
+
+        req.read_body(reader)?;
+
+        Ok(req)
     }
 
     fn read_request_line(reader: &mut BufReader<TcpStream>) -> Result<(String, String, String)> {
@@ -182,6 +188,10 @@ impl Request {
 
     fn read_header(reader: &mut BufReader<TcpStream>) -> Result<Headers> {
         Headers::read_from(reader)
+    }
+
+    fn read_body(&mut self, _reader: &mut BufReader<TcpStream>) -> Result<()> {
+        unimplemented!()
     }
 
     fn write_to(&self, writer: &mut BufWriter<TcpStream>) -> Result<()> {
@@ -407,7 +417,7 @@ impl Response {
 
     fn write_body(&self, writer: &mut BufWriter<TcpStream>) -> Result<()> {
         if let Some(ref body) = self.body {
-            writer.write(body)?;
+            writer.write_all(body)?;
         }
 
         Ok(())
@@ -444,7 +454,7 @@ impl Headers {
         self.inner
             .entry(key.to_string())
             .and_modify(|v| v.push(value.to_string()))
-            .or_insert(vec![value.to_string()]);
+            .or_insert_with(|| vec![value.to_string()]);
     }
 
     fn read_from(reader: &mut BufReader<TcpStream>) -> Result<Headers> {
@@ -472,7 +482,7 @@ impl Headers {
             headers
                 .entry(key)
                 .and_modify(|values| values.push(value.clone()))
-                .or_insert(vec![value]);
+                .or_insert_with(|| vec![value]);
         }
 
         let headers = Headers { inner: headers };
@@ -499,7 +509,7 @@ impl Default for Headers {
 }
 
 fn write_crlf_line(writer: &mut BufWriter<TcpStream>, line: &str) -> Result<()> {
-    writer.write(line.as_bytes())?;
-    writer.write(b"\r\n")?;
+    writer.write_all(line.as_bytes())?;
+    writer.write_all(b"\r\n")?;
     Ok(())
 }

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Read, Write};
@@ -16,7 +18,7 @@ static HTTP_VERSION_1_1: &str = "HTTP/1.1";
 static HEADER_CONTENT_LENGTH: &str = "Content-Length";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut addr = DEFAULT_ADDR.to_string();
+    let addr = DEFAULT_ADDR.to_string();
     let addr: SocketAddr = addr.parse()?;
 
     let mut poller = Poller::new()?;
@@ -234,7 +236,7 @@ impl HttpConn {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if self.w_buf.len() > 0 {
+        if !self.w_buf.is_empty() {
             let nwrite = match self.stream.write(&self.w_buf[..]) {
                 Ok(n) => n,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => 0,
@@ -253,27 +255,25 @@ impl HttpConn {
 
 impl Pollee for HttpConn {
     fn on_readable(&mut self) -> io::Result<State> {
-        let mut len;
+        let mut buf_len = self.r_buf.len();
 
         loop {
             let old_len = self.r_buf.len();
-            len = old_len + BUF_SIZE;
 
-            self.r_buf.resize(len, 0x00);
+            self.r_buf.resize(old_len + BUF_SIZE, 0x00);
 
             match self.stream.read(&mut self.r_buf[old_len..]) {
-                Ok(nread) => len = old_len + nread,
+                Ok(nread) => buf_len = old_len + nread,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
                 Err(e) => return Err(e),
             };
         }
 
-        self.r_buf.resize(len, 0);
+        self.r_buf.resize(buf_len, 0x00);
 
         match self.req_codec.decode(&mut self.r_buf)? {
             Some(req) => {
                 println!("=> {:?}", req);
-                // self.write(&b"HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Length: 22\r\n\r\n<h1>Hello, world!</h1>"[..])?;
                 let mut resp = Response::ok();
                 resp.set_body("<h1>Hello, world</h1>");
 
@@ -289,12 +289,12 @@ impl Pollee for HttpConn {
     }
 
     fn on_writable(&mut self) -> io::Result<State> {
-        if self.w_buf.len() > 0 {
+        if !self.w_buf.is_empty() {
             let nwrite = self.stream.write(&self.w_buf[..])?;
             self.w_buf.advance(nwrite);
         }
 
-        if self.finished && self.w_buf.len() == 0 {
+        if self.finished && self.w_buf.is_empty() {
             return Ok(State::Done);
         }
 
@@ -383,11 +383,9 @@ impl Request {
 
                 buf.advance(offset);
 
-                return Ok(Some(offset));
+                Ok(Some(offset))
             }
-            None => {
-                return Ok(None);
-            }
+            None => Ok(None),
         }
     }
 
@@ -406,7 +404,7 @@ impl Request {
                                 .ok_or_else(|| error_message("content-length error"))?;
                             let len = len
                                 .parse::<usize>()
-                                .map_err(|e| error_message("content-length error"))?;
+                                .map_err(|_e| error_message("content-length error"))?;
                             self.state = RequestState::Body(BodyMode::Lengthed(len))
                         }
                         None => self.state = RequestState::Body(BodyMode::None),
@@ -446,7 +444,7 @@ struct RequestCodec(Request);
 impl Codec for RequestCodec {
     type Item = Request;
 
-    fn encode(&mut self, item: &Self::Item, buf: &mut BytesMut) -> io::Result<()> {
+    fn encode(&mut self, _item: &Self::Item, _buf: &mut BytesMut) -> io::Result<()> {
         unimplemented!()
     }
 
@@ -455,9 +453,9 @@ impl Codec for RequestCodec {
             Some(_) if self.0.state == RequestState::Done => {
                 let req = Request::default();
                 let req = std::mem::replace(&mut self.0, req);
-                return Ok(Some(req));
+                Ok(Some(req))
             }
-            _ => return Ok(None),
+            _ => Ok(None),
         }
     }
 }
@@ -569,7 +567,7 @@ impl Codec for ResponseCodec {
         item.write_response(buf)
     }
 
-    fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
+    fn decode(&mut self, _buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
         unimplemented!()
     }
 }
@@ -594,7 +592,7 @@ impl Headers {
         self.inner
             .entry(key.to_string())
             .and_modify(|v| v.push(value.to_string()))
-            .or_insert(vec![value.to_string()]);
+            .or_insert_with(|| vec![value.to_string()]);
     }
 
     fn parse_headers(&mut self, buf: &mut BytesMut) -> io::Result<Option<usize>> {
@@ -623,7 +621,7 @@ impl Headers {
                     self.inner
                         .entry(key)
                         .and_modify(|values| values.push(value.clone()))
-                        .or_insert(vec![value]);
+                        .or_insert_with(|| vec![value]);
 
                     offset += off;
                 }
@@ -636,7 +634,7 @@ impl Headers {
 
         buf.advance(offset);
 
-        return Ok(Some(offset));
+        Ok(Some(offset))
     }
 
     fn write_to(&self, buf: &mut BytesMut) -> io::Result<()> {
@@ -663,11 +661,9 @@ fn read_crlf_line(buf: &[u8], start: usize, len: usize) -> Option<(String, usize
     }
 
     for i in start..len {
-        if buf[i] == b'\n' {
-            if i > 0 && buf[i - 1] == b'\r' {
-                let line = String::from_utf8_lossy(&buf[start..i]).to_string();
-                return Some((line, i - start + 1));
-            }
+        if buf[i] == b'\n' && i > 0 && buf[i - 1] == b'\r' {
+            let line = String::from_utf8_lossy(&buf[start..i]).to_string();
+            return Some((line, i - start + 1));
         }
     }
 

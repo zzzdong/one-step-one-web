@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+#![allow(dead_code)]
 
+use std::collections::HashMap;
 
 use async_std::io::{self, BufReader, BufWriter, Result};
 use async_std::net::{TcpListener, TcpStream};
@@ -15,9 +16,8 @@ static HEADER_CHUNKED: &str = "chunked";
 const REQUEST_LINE_PART_NUM: usize = 3;
 const STATUS_LINE_PART_NUM: usize = 3;
 
-
 fn main() -> Result<()> {
-    let mut addr = DEFAULT_ADDR;
+    let addr = DEFAULT_ADDR;
 
     task::block_on(async {
         let listener = TcpListener::bind(addr).await?;
@@ -34,7 +34,6 @@ fn main() -> Result<()> {
         Ok(())
     })
 }
-
 
 async fn process(stream: TcpStream) -> Result<()> {
     println!("Accepted from: {}", stream.peer_addr()?);
@@ -110,7 +109,7 @@ impl Request {
             method: method.to_string(),
             target: path.to_string(),
             version: HTTP_VERSION_1_1.to_string(),
-            headers: headers,
+            headers,
             body: None,
         }
     }
@@ -129,7 +128,9 @@ impl Request {
         })
     }
 
-    async fn read_request_line(reader: &mut BufReader<TcpStream>) -> Result<(String, String, String)> {
+    async fn read_request_line(
+        reader: &mut BufReader<TcpStream>,
+    ) -> Result<(String, String, String)> {
         let mut line = String::new();
 
         reader.read_line(&mut line).await?;
@@ -375,7 +376,7 @@ impl Response {
 
     async fn write_body(&self, writer: &mut BufWriter<TcpStream>) -> Result<()> {
         if let Some(ref body) = self.body {
-            writer.write(body).await?;
+            writer.write_all(body).await?;
         }
 
         Ok(())
@@ -412,7 +413,7 @@ impl Headers {
         self.inner
             .entry(key.to_string())
             .and_modify(|v| v.push(value.to_string()))
-            .or_insert(vec![value.to_string()]);
+            .or_insert_with(|| vec![value.to_string()]);
     }
 
     async fn read_from(reader: &mut BufReader<TcpStream>) -> Result<Headers> {
@@ -440,7 +441,7 @@ impl Headers {
             headers
                 .entry(key)
                 .and_modify(|values| values.push(value.clone()))
-                .or_insert(vec![value]);
+                .or_insert_with(|| vec![value]);
         }
 
         let headers = Headers { inner: headers };
@@ -467,7 +468,7 @@ impl Default for Headers {
 }
 
 async fn write_crlf_line(writer: &mut BufWriter<TcpStream>, line: &str) -> Result<()> {
-    writer.write(line.as_bytes()).await?;
-    writer.write(b"\r\n").await?;
+    writer.write_all(line.as_bytes()).await?;
+    writer.write_all(b"\r\n").await?;
     Ok(())
 }

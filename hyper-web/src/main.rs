@@ -1,8 +1,8 @@
 use std::convert::Infallible;
 
+use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
-use hyper::server::conn::AddrStream;
 
 static DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
@@ -20,7 +20,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // returns a Response into a `Service`.
         let remote_addr = socket.remote_addr();
         async move {
-            Ok::<_, Infallible>(service_fn(move|req: Request<Body>|{
+            Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                 println!("handle conn from {:?}", remote_addr);
                 hello(req)
             }))

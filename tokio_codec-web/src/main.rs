@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 
 use bytes::{Buf, BufMut, BytesMut};
@@ -5,7 +7,6 @@ use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 const REQUEST_LINE_PART_NUM: usize = 3;
@@ -131,11 +132,9 @@ impl Request {
 
                 buf.advance(offset);
 
-                return Ok(Some(offset));
+                Ok(Some(offset))
             }
-            None => {
-                return Ok(None);
-            }
+            None => Ok(None),
         }
     }
 
@@ -306,7 +305,7 @@ impl Headers {
         self.inner
             .entry(key.to_string())
             .and_modify(|v| v.push(value.to_string()))
-            .or_insert(vec![value.to_string()]);
+            .or_insert_with(|| vec![value.to_string()]);
     }
 
     fn parse_headers(&mut self, buf: &mut BytesMut) -> io::Result<Option<usize>> {
@@ -335,7 +334,7 @@ impl Headers {
                     self.inner
                         .entry(key)
                         .and_modify(|values| values.push(value.clone()))
-                        .or_insert(vec![value]);
+                        .or_insert_with(|| vec![value]);
 
                     offset += off;
                 }
@@ -348,7 +347,7 @@ impl Headers {
 
         buf.advance(offset);
 
-        return Ok(Some(offset));
+        Ok(Some(offset))
     }
 
     fn write_to(&self, buf: &mut BytesMut) -> io::Result<()> {
@@ -375,11 +374,9 @@ fn read_crlf_line(buf: &[u8], start: usize, len: usize) -> Option<(String, usize
     }
 
     for i in start..len {
-        if buf[i] == b'\n' {
-            if i > 0 && buf[i - 1] == b'\r' {
-                let line = String::from_utf8_lossy(&buf[start..i]).to_string();
-                return Some((line, i - start + 1));
-            }
+        if buf[i] == b'\n' && i > 0 && buf[i - 1] == b'\r' {
+            let line = String::from_utf8_lossy(&buf[start..i]).to_string();
+            return Some((line, i - start + 1));
         }
     }
 
